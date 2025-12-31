@@ -24,7 +24,7 @@ GMAIL_APP_PASSWORD = st.secrets["GMAIL_APP_PASSWORD"]
 ALLOWED_EMAIL = st.secrets["ALLOWED_EMAIL"]
 
 # -------------------------
-# SEND OTP
+# SEND OTP FUNCTION
 # -------------------------
 def send_otp_gmail(receiver_email, otp):
     msg = MIMEMultipart()
@@ -51,7 +51,7 @@ def send_otp_gmail(receiver_email, otp):
         return False
 
 # -------------------------
-# OTP AUTH
+# OTP AUTH FUNCTION
 # -------------------------
 def email_otp_auth():
     if "auth_ok" not in st.session_state:
@@ -95,11 +95,10 @@ def email_otp_auth():
 # MAIN
 # -------------------------
 st.title("📊 Secure Streamlit App")
-
 otp_verified = email_otp_auth()
 
 # -------------------------
-# CODE 2 SECTION (GATED)
+# EXCEL COMPARISON SECTION
 # -------------------------
 if otp_verified:
     st.subheader("📂 Excel Comparison (R0 vs R1)")
@@ -113,6 +112,7 @@ if otp_verified:
     run_btn = st.button("▶️ Run Comparison")
 
     if run_btn:
+        # Validate both files uploaded
         if not r0_file or not r1_file:
             st.warning("⚠️ Please upload both R0.xlsx and R1.xlsx")
         elif r0_file.name != "R0.xlsx" or r1_file.name != "R1.xlsx":
@@ -135,7 +135,7 @@ if otp_verified:
                 all_tags = sorted(set(r0_df.index).union(set(r1_df.index)))
                 comparison_rows = []
 
-                # ----------------- Comparison -----------------
+                # ----------------- Comparison Logic -----------------
                 for tag in all_tags:
                     if tag not in r0_df.index:
                         row = {"Tag": tag, "Change_Type": "✅ Added in R1"}
