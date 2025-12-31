@@ -51,59 +51,52 @@ def send_otp_gmail(receiver_email, otp):
         return False
 
 # -------------------------
-# OTP AUTH FUNCTION
+# OTP AUTH
 # -------------------------
-def email_otp_auth():
-    if "auth_ok" not in st.session_state:
-        st.session_state.auth_ok = False
-    if "otp_sent" not in st.session_state:
-        st.session_state.otp_sent = False
-    if "otp_time" not in st.session_state:
-        st.session_state.otp_time = None
+if "auth_ok" not in st.session_state:
+    st.session_state.auth_ok = False
+if "otp_sent" not in st.session_state:
+    st.session_state.otp_sent = False
+if "otp_time" not in st.session_state:
+    st.session_state.otp_time = None
+if "otp" not in st.session_state:
+    st.session_state.otp = ""
 
-    st.subheader("🔐 Gmail OTP Login")
-    email = st.text_input("Enter your Gmail address")
+st.title("📊 Secure Streamlit App")
+st.subheader("🔐 Gmail OTP Login")
 
-    if st.button("📨 Send OTP"):
-        if email.strip().lower() != ALLOWED_EMAIL.lower():
-            st.error("❌ Unauthorized email")
-            st.stop()
+email = st.text_input("Enter your Gmail address", key="email_input")
 
+if st.button("📨 Send OTP"):
+    if email.strip().lower() != ALLOWED_EMAIL.lower():
+        st.error("❌ Unauthorized email")
+    else:
         otp = str(random.randint(100000, 999999))
         st.session_state.otp = otp
         st.session_state.otp_time = time.time()
-        if send_otp_gmail(email, otp):
-            st.session_state.otp_sent = True
+        st.session_state.otp_sent = send_otp_gmail(email, otp)
+        if st.session_state.otp_sent:
             st.success("✅ OTP sent to your Gmail")
 
-    if st.session_state.otp_sent:
-        entered_otp = st.text_input("Enter OTP", max_chars=6)
-        if st.button("✅ Verify OTP"):
-            if time.time() - st.session_state.otp_time > OTP_EXPIRY_SECONDS:
-                st.error("⏰ OTP expired. Send a new one.")
-                st.session_state.otp_sent = False
-                return False
-            if entered_otp == st.session_state.otp:
-                st.session_state.auth_ok = True
-                st.success("🎉 Login successful")
-                return True
-            else:
-                st.error("❌ Invalid OTP")
-    return False
+entered_otp = st.text_input("Enter OTP", max_chars=6, key="otp_input")
+if st.button("✅ Verify OTP"):
+    if not st.session_state.otp_sent:
+        st.warning("⚠️ Please request OTP first")
+    elif time.time() - st.session_state.otp_time > OTP_EXPIRY_SECONDS:
+        st.error("⏰ OTP expired. Send a new one.")
+        st.session_state.otp_sent = False
+    elif entered_otp == st.session_state.otp:
+        st.session_state.auth_ok = True
+        st.success("🎉 Login successful")
+    else:
+        st.error("❌ Invalid OTP")
 
 # -------------------------
-# MAIN
+# Excel Comparison Section
 # -------------------------
-st.title("📊 Secure Streamlit App")
-otp_verified = email_otp_auth()
-
-# -------------------------
-# EXCEL COMPARISON SECTION
-# -------------------------
-if otp_verified:
+if st.session_state.auth_ok:
     st.subheader("📂 Excel Comparison (R0 vs R1)")
 
-    # Initialize session_state for files
     if "r0_file" not in st.session_state:
         st.session_state.r0_file = None
     if "r1_file" not in st.session_state:
@@ -111,11 +104,11 @@ if otp_verified:
 
     col1, col2 = st.columns(2)
     with col1:
-        uploaded_r0 = st.file_uploader("Upload R0.xlsx", type=["xlsx"])
+        uploaded_r0 = st.file_uploader("Upload R0.xlsx", type=["xlsx"], key="r0_uploader")
         if uploaded_r0:
             st.session_state.r0_file = uploaded_r0
     with col2:
-        uploaded_r1 = st.file_uploader("Upload R1.xlsx", type=["xlsx"])
+        uploaded_r1 = st.file_uploader("Upload R1.xlsx", type=["xlsx"], key="r1_uploader")
         if uploaded_r1:
             st.session_state.r1_file = uploaded_r1
 
@@ -131,7 +124,6 @@ if otp_verified:
             st.error("❌ Uploaded files must be named exactly R0.xlsx and R1.xlsx")
         else:
             try:
-                # ----------------- Load Data -----------------
                 r0_df = pd.read_excel(r0_file, dtype=str).fillna("")
                 r1_df = pd.read_excel(r1_file, dtype=str).fillna("")
 
@@ -147,7 +139,6 @@ if otp_verified:
                 all_tags = sorted(set(r0_df.index).union(set(r1_df.index)))
                 comparison_rows = []
 
-                # ----------------- Comparison Logic -----------------
                 for tag in all_tags:
                     if tag not in r0_df.index:
                         row = {"Tag": tag, "Change_Type": "✅ Added in R1"}
@@ -182,7 +173,7 @@ if otp_verified:
                 final_columns = ["Tag", "Change_Type"] + all_columns + ["Change_Summary"]
                 comparison_df = comparison_df[final_columns]
 
-                # ----------------- Save Excel -----------------
+                # Save Excel with highlights
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "Comparison Summary"
@@ -210,5 +201,3 @@ if otp_verified:
 
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
-else:
-    st.info("ℹ️ Enter your email and OTP to enable Excel Comparison")
