@@ -197,7 +197,7 @@ if st.session_state.auth_ok:
                     )
 
                 st.success("✅ Comparison completed successfully")
-                st.info("🙏 Thank Vimal Always He is there to save lives")
+                st.info("🙏 Thank You Vimal")
 
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
