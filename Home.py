@@ -1,12 +1,230 @@
 import streamlit as st
+import random
+import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill
+from openpyxl.utils.dataframe import dataframe_to_rows
+from datetime import datetime
+import tempfile
 
-st.set_page_config(page_title="Multi-Code App", layout="wide")
-st.title("Welcome to the Multi-Code Streamlit App")
+# =========================
+# CONFIG
+# =========================
+OTP_EXPIRY_SECONDS = 300  # 5 minutes
 
-st.write("""
-This app runs two separate scripts in sequence:
-1. Code 1
-2. Code 2
+# =========================
+# SECRETS
+# =========================
+GMAIL_USER = st.secrets["GMAIL_USER"]
+GMAIL_APP_PASSWORD = st.secrets["GMAIL_APP_PASSWORD"]
+ALLOWED_EMAIL = st.secrets["ALLOWED_EMAIL"]
 
-Use the left sidebar to navigate between pages.
-""")
+# =========================
+# SEND OTP
+# =========================
+def send_otp_gmail(receiver_email, otp):
+    msg = MIMEMultipart()
+    msg["From"] = GMAIL_USER
+    msg["To"] = receiver_email
+    msg["Subject"] = "🔐 Your Streamlit Login OTP"
+
+    body = f"""
+    <h2>Your OTP is: {otp}</h2>
+    <p>This OTP is valid for <b>5 minutes</b>.</p>
+    <p>Do not share it with anyone.</p>
+    """
+    msg.attach(MIMEText(body, "html"))
+
+    try:
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+        server.sendmail(GMAIL_USER, receiver_email, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        st.error(f"Email send failed: {e}")
+        return False
+
+# =========================
+# OTP AUTH FLOW
+# =========================
+def email_otp_auth():
+    if "auth_ok" not in st.session_state:
+        st.session_state.auth_ok = False
+    if "otp_sent" not in st.session_state:
+        st.session_state.otp_sent = False
+    if "otp_time" not in st.session_state:
+        st.session_state.otp_time = None
+
+    if st.session_state.auth_ok:
+        return True
+
+    st.subheader("🔐 Gmail OTP Login")
+    email = st.text_input("Enter your Gmail address")
+
+    if st.button("📨 Send OTP"):
+        if email.strip().lower() != ALLOWED_EMAIL.lower():
+            st.error("❌ Unauthorized email")
+            st.stop()
+
+        otp = str(random.randint(100000, 999999))
+        st.session_state.otp = otp
+        st.session_state.otp_time = time.time()
+
+        if send_otp_gmail(email, otp):
+            st.session_state.otp_sent = True
+            st.success("✅ OTP sent to your Gmail")
+
+    if st.session_state.otp_sent:
+        entered_otp = st.text_input("Enter OTP", max_chars=6)
+
+        if st.button("✅ Verify OTP"):
+            if time.time() - st.session_state.otp_time > OTP_EXPIRY_SECONDS:
+                st.error("⏰ OTP expired. Send a new one.")
+                st.session_state.otp_sent = False
+                return False
+
+            if entered_otp == st.session_state.otp:
+                st.session_state.auth_ok = True
+                st.success("🎉 Login successful")
+                return True
+            else:
+                st.error("❌ Invalid OTP")
+
+    return False
+
+# =========================
+# PROTECT APP
+# =========================
+if not email_otp_auth():
+    st.stop()
+
+# =========================
+# POST-LOGIN: Excel Comparison (Code 2)
+# =========================
+st.set_page_config(
+    page_title="R0 vs R1 Excel Comparison",
+    layout="wide"
+)
+
+st.title("📊 Vimal Raj Will Save US")
+st.caption("Saving lives is the best skill a person can have")
+
+# ----------------------
+# File Upload
+# ----------------------
+col1, col2 = st.columns(2)
+with col1:
+    r0_file = st.file_uploader("Upload R0.xlsx", type=["xlsx"])
+with col2:
+    r1_file = st.file_uploader("Upload R1.xlsx", type=["xlsx"])
+
+# ----------------------
+# Run Comparison
+# ----------------------
+if "excel_run" not in st.session_state:
+    st.session_state.excel_run = False
+
+if not st.session_state.excel_run:
+    if r0_file and r1_file:
+        try:
+            # Load Data
+            r0_df = pd.read_excel(r0_file, dtype=str).fillna("")
+            r1_df = pd.read_excel(r1_file, dtype=str).fillna("")
+
+            if "Tag" not in r0_df.columns or "Tag" not in r1_df.columns:
+                st.error("❌ Both files must contain a 'Tag' column")
+                st.stop()
+
+            r0_df = r0_df.drop_duplicates(subset="Tag").set_index("Tag")
+            r1_df = r1_df.drop_duplicates(subset="Tag").set_index("Tag")
+
+            r0_columns = list(r0_df.columns)
+            all_columns = sorted(
+                set(r0_df.columns).union(set(r1_df.columns)),
+                key=lambda x: (r0_columns.index(x) if x in r0_columns else float("inf"))
+            )
+            all_tags = sorted(set(r0_df.index).union(set(r1_df.index)))
+            comparison_rows = []
+
+            for tag in all_tags:
+                if tag not in r0_df.index:
+                    row = {"Tag": tag, "Change_Type": "✅ Added in R1"}
+                    row.update({col: r1_df.loc[tag].get(col, "") for col in all_columns})
+                    row["Change_Summary"] = ""
+                    comparison_rows.append(row)
+                elif tag not in r1_df.index:
+                    row = {"Tag": tag, "Change_Type": "❌ Removed in R1"}
+                    row.update({col: r0_df.loc[tag].get(col, "") for col in all_columns})
+                    row["Change_Summary"] = ""
+                    comparison_rows.append(row)
+                else:
+                    row_r0 = r0_df.loc[tag]
+                    row_r1 = r1_df.loc[tag]
+                    row_data = {"Tag": tag}
+                    summary = []
+                    changes_exist = False
+
+                    for col in all_columns:
+                        val_r0 = row_r0.get(col, "")
+                        val_r1 = row_r1.get(col, "")
+                        if str(val_r0).strip() != str(val_r1).strip():
+                            row_data[col] = f"{val_r0} → {val_r1}"
+                            summary.append(f"{col}: {val_r0} → {val_r1}")
+                            changes_exist = True
+                        else:
+                            row_data[col] = val_r1
+
+                    row_data["Change_Type"] = "✏️ Modified" if changes_exist else "No Change"
+                    row_data["Change_Summary"] = " | ".join(summary) if summary else ""
+                    comparison_rows.append(row_data)
+
+            # Final DataFrame
+            comparison_df = pd.DataFrame(comparison_rows)
+            final_columns = ["Tag", "Change_Type"] + all_columns + ["Change_Summary"]
+            comparison_df = comparison_df[final_columns]
+
+            # Display Result
+            st.subheader("🔍 Comparison Result")
+            st.dataframe(comparison_df, use_container_width=True)
+
+            # Save Excel Output
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Vimal Comparison Summary"
+
+            highlight = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+            for r_idx, row in enumerate(dataframe_to_rows(comparison_df, index=False, header=True), 1):
+                for c_idx, value in enumerate(row, 1):
+                    cell = ws.cell(row=r_idx, column=c_idx, value=value)
+                    if isinstance(value, str) and "→" in value:
+                        cell.fill = highlight
+
+            timestamp = datetime.now().strftime("%d_%m_%Y_%H_%M")
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+            wb.save(temp_file.name)
+
+            with open(temp_file.name, "rb") as f:
+                downloaded = st.download_button(
+                    "⬇️ Download Excel",
+                    f,
+                    file_name=f"Vimal_Comparison_R0_vs_R1_{timestamp}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+            if downloaded:
+                st.success("🙏 Thank Vimal Always He is there to save lives")
+
+            st.success("✅ Comparison completed successfully")
+            st.session_state.excel_run = True
+
+        except Exception as e:
+            st.error(f"⚠️ Error: {e}")
+    else:
+        st.info("📂 Please upload both R0.xlsx and R1.xlsx to start comparison")
