@@ -103,16 +103,28 @@ otp_verified = email_otp_auth()
 if otp_verified:
     st.subheader("📂 Excel Comparison (R0 vs R1)")
 
+    # Initialize session_state for files
+    if "r0_file" not in st.session_state:
+        st.session_state.r0_file = None
+    if "r1_file" not in st.session_state:
+        st.session_state.r1_file = None
+
     col1, col2 = st.columns(2)
     with col1:
-        r0_file = st.file_uploader("Upload R0.xlsx", type=["xlsx"])
+        uploaded_r0 = st.file_uploader("Upload R0.xlsx", type=["xlsx"])
+        if uploaded_r0:
+            st.session_state.r0_file = uploaded_r0
     with col2:
-        r1_file = st.file_uploader("Upload R1.xlsx", type=["xlsx"])
+        uploaded_r1 = st.file_uploader("Upload R1.xlsx", type=["xlsx"])
+        if uploaded_r1:
+            st.session_state.r1_file = uploaded_r1
+
+    r0_file = st.session_state.r0_file
+    r1_file = st.session_state.r1_file
 
     run_btn = st.button("▶️ Run Comparison")
 
     if run_btn:
-        # Validate both files uploaded
         if not r0_file or not r1_file:
             st.warning("⚠️ Please upload both R0.xlsx and R1.xlsx")
         elif r0_file.name != "R0.xlsx" or r1_file.name != "R1.xlsx":
