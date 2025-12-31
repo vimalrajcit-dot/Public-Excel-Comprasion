@@ -102,8 +102,8 @@ otp_verified = email_otp_auth()
 # CODE 2 SECTION (GATED)
 # -------------------------
 if otp_verified:
-    st.subheader("📂 Excel Comparison (Code 2)")
-    
+    st.subheader("📂 Excel Comparison (R0 vs R1)")
+
     col1, col2 = st.columns(2)
     with col1:
         r0_file = st.file_uploader("Upload R0.xlsx", type=["xlsx"])
@@ -115,6 +115,8 @@ if otp_verified:
     if run_btn:
         if not r0_file or not r1_file:
             st.warning("⚠️ Please upload both R0.xlsx and R1.xlsx")
+        elif r0_file.name != "R0.xlsx" or r1_file.name != "R1.xlsx":
+            st.error("❌ Uploaded files must be named exactly R0.xlsx and R1.xlsx")
         else:
             try:
                 # ----------------- Load Data -----------------
@@ -192,6 +194,7 @@ if otp_verified:
                     )
 
                 st.success("✅ Comparison completed successfully")
+                st.info("🙏 Thank Vimal Always He is there to save lives")
 
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
